@@ -1,0 +1,196 @@
+:root {
+  --bg: #0f1226;
+  --card: #1a1f3a;
+  --accent: #6c8cff;
+  --accent-2: #ff7eb6;
+  --text: #eef1ff;
+  --muted: #9aa3c7;
+  --ok: #3ddc97;
+  --no: #ff6b6b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Hiragana Kaku Gothic ProN",
+    sans-serif;
+  background: radial-gradient(circle at top, #1b2150, var(--bg));
+  color: var(--text);
+  min-height: 100vh;
+}
+
+.container {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 20px 64px;
+}
+
+h1 {
+  margin: 0 0 8px;
+  font-size: 2rem;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.subtitle {
+  color: var(--muted);
+  margin: 4px 0 16px;
+  line-height: 1.6;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 20px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+}
+
+label {
+  display: block;
+  margin: 12px 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+input {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text);
+  font-size: 1rem;
+}
+
+button {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font-size: 1rem;
+  cursor: pointer;
+  margin-top: 10px;
+  transition: transform 0.05s ease, background 0.2s ease;
+}
+
+button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+button:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  border: none;
+  font-weight: 600;
+}
+
+.divider {
+  text-align: center;
+  color: var(--muted);
+  margin: 18px 0;
+  font-size: 0.85rem;
+}
+
+.error {
+  color: var(--no);
+  margin-top: 12px;
+}
+
+.room-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.members ul {
+  list-style: none;
+  padding: 0;
+  margin: 6px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.members li {
+  background: rgba(108, 140, 255, 0.18);
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+}
+
+.options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.option {
+  margin-top: 0;
+}
+
+.option.selected {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  border: none;
+  font-weight: 600;
+}
+
+.picks,
+.pairs {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 16px;
+}
+
+.picks li,
+.pairs li {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.match {
+  color: var(--ok);
+  font-weight: 700;
+}
+
+.nomatch {
+  color: var(--muted);
+}
+
+.rate {
+  font-weight: 700;
+}
+
+.rate small {
+  color: var(--muted);
+  font-weight: 400;
+  margin-left: 6px;
+}
+
+.best {
+  color: var(--accent-2);
+  font-weight: 600;
+}
