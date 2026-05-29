@@ -1,16 +1,22 @@
 import { createServer } from "node:http";
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import express from "express";
 import cors from "cors";
 import { Server } from "socket.io";
-import { waitForDb } from "./db.js";
+import { waitForDb, runSchema } from "./db.js";
 import { createRoomsRouter } from "./routes/rooms.js";
 import { registerSocketHandlers } from "./socket.js";
 
-const PORT = Number(process.env.BACKEND_PORT) || 5000;
+// Render などの PaaS は PORT を注入する。ローカルは BACKEND_PORT / 5000。
+const PORT = Number(process.env.PORT) || Number(process.env.BACKEND_PORT) || 5000;
+// 単一サービス配信なら同一オリジンで CORS 不要。開発(別オリジン)では localhost:5173 を許可。
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:5173";
 
 async function main() {
   await waitForDb();
+  await runSchema();
 
   const app = express();
   app.use(cors({ origin: CLIENT_ORIGIN }));
@@ -29,6 +35,19 @@ async function main() {
 
   app.use("/api", createRoomsRouter(io));
 
+  // 単一サービス配信: ビルド済みフロント(static)があれば配信する。
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const staticDir =
+    process.env.STATIC_DIR ?? path.join(__dirname, "../public");
+  if (existsSync(staticDir)) {
+    app.use(express.static(staticDir));
+    // SPA フォールバック: /api 以外は index.html を返す
+    app.get(/^\/(?!api\/).*/, (_req, res) => {
+      res.sendFile(path.join(staticDir, "index.html"));
+    });
+    console.log(`[backend] serving static frontend from ${staticDir}`);
+  }
+
   // エラーハンドラ
   app.use(
     (
@@ -43,7 +62,7 @@ async function main() {
   );
 
   httpServer.listen(PORT, () => {
-    console.log(`[backend] listening on http://localhost:${PORT}`);
+    console.log(`[backend] listening on port ${PORT}`);
   });
 }
 
