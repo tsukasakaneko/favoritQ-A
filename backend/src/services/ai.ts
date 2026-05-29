@@ -26,7 +26,8 @@ export async function generateOptions(
   try {
     const client = new Anthropic();
     const response = await client.messages.create({
-      model: "claude-opus-4-8",
+      // 選択肢を数個生成するだけの軽いタスクなので、高速・低コストな Haiku で十分
+      model: "claude-haiku-4-5",
       max_tokens: 1024,
       // 安定したプレフィックスはキャッシュ対象にしておく（プロンプトキャッシュ）
       system: [

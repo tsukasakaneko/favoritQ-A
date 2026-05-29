@@ -9,7 +9,7 @@
 - **DB**: PostgreSQL 16
 - **バックエンド**: Node.js + TypeScript（Express + Socket.IO + `pg`）
 - **フロントエンド**: React + TypeScript + Vite
-- **AI**: Anthropic Claude API（`@anthropic-ai/sdk`、`claude-opus-4-8`）。APIキー未設定時はモック選択肢にフォールバック
+- **AI**: Anthropic Claude API（`@anthropic-ai/sdk`、`claude-haiku-4-5`）。選択肢生成は軽いタスクなので高速・低コストな Haiku を使用。APIキー未設定時はモック選択肢にフォールバック
 - **リアルタイム**: Socket.IO（複数人の同期）
 
 ## ディレクトリ構成
