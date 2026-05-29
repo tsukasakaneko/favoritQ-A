@@ -1,8 +1,21 @@
 import { Router } from "express";
+import type { RequestHandler } from "express";
 import type { Server } from "socket.io";
 import { query } from "../db.js";
 import { generateOptions } from "../services/ai.js";
 import { matchingForRoom, matchingForTopic } from "../services/matching.js";
+
+/**
+ * Express 4 は async ハンドラの reject を error middleware に渡さないため、
+ * このラッパーで明示的に next(err) へ転送する（未処理 rejection 防止）。
+ */
+function asyncHandler(
+  fn: (...args: Parameters<RequestHandler>) => Promise<unknown>
+): RequestHandler {
+  return (req, res, next) => {
+    Promise.resolve(fn(req, res, next)).catch(next);
+  };
+}
 
 function generateRoomCode(): string {
   // 紛らわしい文字(0/O/1/I)を除いた6文字
@@ -65,7 +78,7 @@ export function createRoomsRouter(io: Server): Router {
   const router = Router();
 
   // ルーム作成
-  router.post("/rooms", async (req, res) => {
+  router.post("/rooms", asyncHandler(async (req, res) => {
     const name: string | undefined = req.body?.name;
     // ユニークな code を確保（衝突時はリトライ）
     let code = generateRoomCode();
@@ -79,10 +92,10 @@ export function createRoomsRouter(io: Server): Router {
       [code, name ?? null]
     );
     res.status(201).json({ room: rows[0] });
-  });
+  }));
 
   // ルーム参加
-  router.post("/rooms/:code/join", async (req, res) => {
+  router.post("/rooms/:code/join", asyncHandler(async (req, res) => {
     const name: string | undefined = req.body?.name;
     if (!name || !name.trim()) {
       return res.status(400).json({ error: "name is required" });
@@ -99,17 +112,17 @@ export function createRoomsRouter(io: Server): Router {
     io.to(room.code).emit("member-joined", { member });
     const state = await getRoomState(room);
     res.status(201).json({ member, ...state });
-  });
+  }));
 
   // ルーム状態取得
-  router.get("/rooms/:code", async (req, res) => {
+  router.get("/rooms/:code", asyncHandler(async (req, res) => {
     const room = await findRoomByCode(req.params.code);
     if (!room) return res.status(404).json({ error: "room not found" });
     res.json(await getRoomState(room));
-  });
+  }));
 
   // お題を設定（既存の active を閉じ、AIで選択肢を生成）
-  router.post("/rooms/:code/topics", async (req, res) => {
+  router.post("/rooms/:code/topics", asyncHandler(async (req, res) => {
     const title: string | undefined = req.body?.title;
     const count: number = Number(req.body?.count) || 6;
     if (!title || !title.trim()) {
@@ -144,22 +157,41 @@ export function createRoomsRouter(io: Server): Router {
     const payload = { topic, options: optionRows };
     io.to(room.code).emit("topic-started", payload);
     res.status(201).json(payload);
-  });
+  }));
 
   // 選択を記録
-  router.post("/topics/:id/choices", async (req, res) => {
+  router.post("/topics/:id/choices", asyncHandler(async (req, res) => {
     const memberId: string | undefined = req.body?.memberId;
     const optionId: string | undefined = req.body?.optionId;
     if (!memberId || !optionId) {
       return res.status(400).json({ error: "memberId and optionId are required" });
     }
 
-    const { rows: topicRows } = await query(
-      `SELECT id, room_id FROM topics WHERE id = $1`,
+    const { rows: topicRows } = await query<{ id: string; room_id: string; status: string }>(
+      `SELECT id, room_id, status FROM topics WHERE id = $1`,
       [req.params.id]
     );
     const topic = topicRows[0];
     if (!topic) return res.status(404).json({ error: "topic not found" });
+    if (topic.status !== "active") {
+      return res.status(409).json({ error: "topic is not active" });
+    }
+
+    // 所有権の検証: member が同じルーム、option が同じお題に属することを確認
+    const { rows: memberRows } = await query(
+      `SELECT 1 FROM members WHERE id = $1 AND room_id = $2`,
+      [memberId, topic.room_id]
+    );
+    if (!memberRows[0]) {
+      return res.status(400).json({ error: "member does not belong to this room" });
+    }
+    const { rows: optionRows } = await query(
+      `SELECT 1 FROM options WHERE id = $1 AND topic_id = $2`,
+      [optionId, topic.id]
+    );
+    if (!optionRows[0]) {
+      return res.status(400).json({ error: "option does not belong to this topic" });
+    }
 
     await query(
       `INSERT INTO choices (topic_id, member_id, option_id)
@@ -191,16 +223,16 @@ export function createRoomsRouter(io: Server): Router {
     }
 
     res.json({ ok: true, voted, total });
-  });
+  }));
 
   // 単一お題のマッチング率
-  router.get("/topics/:id/result", async (req, res) => {
+  router.get("/topics/:id/result", asyncHandler(async (req, res) => {
     const result = await matchingForTopic(req.params.id);
     res.json(result);
-  });
+  }));
 
   // お題を閉じる（「次のお題へ」用）— 閉じるとルームは lobby に戻る
-  router.post("/topics/:id/close", async (req, res) => {
+  router.post("/topics/:id/close", asyncHandler(async (req, res) => {
     const { rows } = await query(
       `UPDATE topics SET status = 'closed' WHERE id = $1 RETURNING room_id`,
       [req.params.id]
@@ -215,15 +247,15 @@ export function createRoomsRouter(io: Server): Router {
       io.to(roomRows[0].code).emit("topic-closed", { topicId: req.params.id });
     }
     res.json({ ok: true });
-  });
+  }));
 
   // ルーム累計のマッチング率
-  router.get("/rooms/:code/result", async (req, res) => {
+  router.get("/rooms/:code/result", asyncHandler(async (req, res) => {
     const room = await findRoomByCode(req.params.code);
     if (!room) return res.status(404).json({ error: "room not found" });
     const result = await matchingForRoom(room.id);
     res.json(result);
-  });
+  }));
 
   return router;
 }
