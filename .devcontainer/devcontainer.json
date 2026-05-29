@@ -1,0 +1,24 @@
+{
+  "name": "favoritQ-A",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "backend",
+  "workspaceFolder": "/workspaces/favoritQ-A",
+  "shutdownAction": "stopCompose",
+  "forwardPorts": [5173, 5000, 5432],
+  "portsAttributes": {
+    "5173": { "label": "frontend (Vite)" },
+    "5000": { "label": "backend (API)" },
+    "5432": { "label": "postgres" }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "ms-azuretools.vscode-docker",
+        "bradlc.vscode-tailwindcss"
+      ]
+    }
+  },
+  "remoteUser": "node"
+}
