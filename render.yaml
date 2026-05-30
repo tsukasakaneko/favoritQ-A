@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: favoritq-a
+    env: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: favoritq-db
+          property: connectionString
+      - key: ANTHROPIC_API_KEY
+        sync: false  # Render ダッシュボードで手動設定
+
+databases:
+  - name: favoritq-db
+    plan: free
