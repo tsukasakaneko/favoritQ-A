@@ -18,7 +18,7 @@ export interface MatchingResult {
   best: PairMatch | null;
 }
 
-interface ChoiceRow {
+export interface ChoiceRow {
   topic_id: string;
   member_id: string;
   member_name: string;
@@ -30,7 +30,7 @@ interface ChoiceRow {
  * - 各お題で同じ option を選べば「一致」。
  * - rate = matchedTopics / sharedTopics * 100
  */
-function computeFromChoices(rows: ChoiceRow[]): MatchingResult {
+export function computeFromChoices(rows: ChoiceRow[]): MatchingResult {
   // member 情報
   const members = new Map<string, string>();
   for (const r of rows) members.set(r.member_id, r.member_name);
