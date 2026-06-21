@@ -61,8 +61,10 @@ async function findRoomByCode(code: string): Promise<RoomRow | null> {
 
 /** ルームの現在状態（メンバー・進行中のお題と選択肢・投票状況）を返す。 */
 async function getRoomState(room: RoomRow) {
+  // token を持つメンバーのみ対象（マイグレーション前の token=NULL の幽霊行は除外）。
   const { rows: members } = await query(
-    `SELECT id, name, joined_at FROM members WHERE room_id = $1 ORDER BY joined_at`,
+    `SELECT id, name, joined_at FROM members
+       WHERE room_id = $1 AND token IS NOT NULL ORDER BY joined_at`,
     [room.id]
   );
 
@@ -224,11 +226,13 @@ export function createRoomsRouter(io: Server): Router {
       [topic.id, memberId, optionId]
     );
 
-    // 投票状況を集計
+    // 投票状況を集計（total は token を持つ有効メンバーのみ。token=NULL の
+    // 幽霊行を含めると voted>=total に到達せずお題を完了できなくなるため除外）。
     const { rows: counts } = await query<{ voted: string; total: string }>(
       `SELECT
          (SELECT COUNT(*) FROM choices WHERE topic_id = $1) AS voted,
-         (SELECT COUNT(*) FROM members WHERE room_id = $2) AS total`,
+         (SELECT COUNT(*) FROM members
+            WHERE room_id = $2 AND token IS NOT NULL) AS total`,
       [topic.id, topic.room_id]
     );
     const voted = Number(counts[0].voted);
