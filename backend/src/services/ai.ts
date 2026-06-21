@@ -58,7 +58,7 @@ export async function generateOptions(
 }
 
 /** レスポンステキストから {"options": [...]} を抽出する。 */
-function parseOptions(text: string): string[] {
+export function parseOptions(text: string): string[] {
   // コードフェンスや余計なテキストが混ざっても拾えるよう、最初の JSON オブジェクトを抽出
   const match = text.match(/\{[\s\S]*\}/);
   const json = match ? match[0] : text;

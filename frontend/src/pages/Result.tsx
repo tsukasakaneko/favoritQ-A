@@ -1,4 +1,5 @@
 import type { MatchingResult, Option, Choice, Member } from "../api.js";
+import { rateLabel } from "../format.js";
 
 interface Props {
   title: string;
@@ -8,10 +9,6 @@ interface Props {
   topicResult: MatchingResult | null;
   roomResult: MatchingResult | null;
   onNext: () => Promise<void>;
-}
-
-function rateLabel(rate: number | null): string {
-  return rate === null ? "—" : `${rate}%`;
 }
 
 export default function Result({
