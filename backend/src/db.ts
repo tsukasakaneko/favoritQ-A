@@ -29,6 +29,27 @@ export async function query<T extends pg.QueryResultRow = any>(
 }
 
 /**
+ * 複数クエリを1トランザクションで実行する。
+ * コールバックが投げれば ROLLBACK、正常終了で COMMIT。
+ */
+export async function withTransaction<T>(
+  fn: (client: pg.PoolClient) => Promise<T>
+): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await fn(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * Wait for the database to accept connections. The postgres healthcheck in
  * docker-compose gates `depends_on`, but this gives a clearer error locally.
  */
@@ -67,5 +88,21 @@ export async function runSchema(): Promise<void> {
     }
     throw err;
   }
+}
+
+/**
+ * 一定時間より古いルームを削除する（メンバー・お題・選択肢は CASCADE で連鎖削除）。
+ * 古いデータが無限に蓄積するのを防ぐ。デフォルト 24 時間。
+ * @returns 削除したルーム数
+ */
+export async function cleanupStaleRooms(maxAgeHours = 24): Promise<number> {
+  const { rowCount } = await pool.query(
+    `DELETE FROM rooms WHERE created_at < now() - ($1 || ' hours')::interval`,
+    [String(maxAgeHours)]
+  );
+  if (rowCount && rowCount > 0) {
+    console.log(`[db] cleaned up ${rowCount} stale room(s) older than ${maxAgeHours}h`);
+  }
+  return rowCount ?? 0;
 }
 

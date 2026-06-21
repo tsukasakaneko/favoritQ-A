@@ -63,6 +63,7 @@ VS Code で「Reopen in Container」を選ぶと、`docker-compose.yml` の `bac
 | ------ | ---- | ---- |
 | POST | `/api/rooms` | ルーム作成 |
 | POST | `/api/rooms/:code/join` | 名前で参加（メンバートークンを発行して返す） |
+| POST | `/api/rooms/:code/leave` | ルームから退出（`x-member-token` で本人確認） |
 | GET  | `/api/rooms/:code` | ルーム状態（メンバー・進行中お題） |
 | POST | `/api/rooms/:code/topics` | お題設定＋選択肢生成 |
 | POST | `/api/topics/:id/choices` | 選択を記録（`x-member-token` ヘッダで本人確認） |

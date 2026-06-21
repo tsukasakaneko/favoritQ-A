@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { api, type RoomState, type MatchingResult } from "../api.js";
 import { getSocket } from "../socket.js";
-import { loadMember } from "./Home.js";
+import { loadMember, clearMember } from "../member.js";
 import Vote from "./Vote.js";
 import Result from "./Result.js";
 
@@ -32,13 +32,15 @@ export default function Room() {
   }, [me, navigate]);
 
   // 初期ロード + Socket 購読
+  const myMemberId = me?.memberId;
   useEffect(() => {
     refresh();
     const socket = getSocket();
-    socket.emit("join-room", { code });
+    socket.emit("join-room", { code, memberId: myMemberId });
 
     const onChange = () => refresh();
     socket.on("member-joined", onChange);
+    socket.on("member-left", onChange);
     socket.on("topic-started", onChange);
     socket.on("choice-made", onChange);
     socket.on("result-ready", onChange);
@@ -51,12 +53,13 @@ export default function Room() {
     return () => {
       socket.emit("leave-room", { code });
       socket.off("member-joined", onChange);
+      socket.off("member-left", onChange);
       socket.off("topic-started", onChange);
       socket.off("choice-made", onChange);
       socket.off("result-ready", onChange);
       socket.off("topic-closed");
     };
-  }, [code, refresh]);
+  }, [code, refresh, myMemberId]);
 
   const activeTopic = state?.activeTopic ?? null;
   const total = state?.members.length ?? 0;
@@ -97,6 +100,18 @@ export default function Room() {
     await api.closeTopic(activeTopic.id);
   }
 
+  async function handleLeave() {
+    if (!me) return;
+    if (!confirm("このルームから退出しますか？")) return;
+    try {
+      await api.leaveRoom(code, me.memberId, me.token);
+    } catch {
+      /* 失敗してもローカルからは退出する */
+    }
+    clearMember(code);
+    navigate("/");
+  }
+
   if (!me) return null;
 
   return (
@@ -105,6 +120,9 @@ export default function Room() {
         <div>
           <h1>ルーム {code}</h1>
           <p className="subtitle">あなた: {me.memberName}</p>
+          <button className="link" onClick={handleLeave}>
+            退出する
+          </button>
         </div>
         <div className="members">
           <strong>参加者 ({total})</strong>

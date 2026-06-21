@@ -1,29 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api.js";
-
-export interface StoredMember {
-  memberId: string;
-  memberName: string;
-  token: string;
-}
-
-export function saveMember(
-  code: string,
-  memberId: string,
-  memberName: string,
-  token: string
-) {
-  localStorage.setItem(
-    `favoritq:${code.toUpperCase()}`,
-    JSON.stringify({ memberId, memberName, token })
-  );
-}
-
-export function loadMember(code: string): StoredMember | null {
-  const raw = localStorage.getItem(`favoritq:${code.toUpperCase()}`);
-  return raw ? (JSON.parse(raw) as StoredMember) : null;
-}
+import { saveMember } from "../member.js";
 
 export default function Home() {
   const navigate = useNavigate();
