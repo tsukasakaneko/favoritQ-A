@@ -15,8 +15,13 @@ CREATE TABLE IF NOT EXISTS members (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     room_id     UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
     name        TEXT NOT NULL,
+    -- 参加時に発行する秘密トークン。本人確認（なりすまし防止）に使う。
+    token       TEXT,
     joined_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- 既存DBへの後方互換: runSchema は毎起動で実行されるため冪等にカラム追加。
+ALTER TABLE members ADD COLUMN IF NOT EXISTS token TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_members_room ON members(room_id);
 

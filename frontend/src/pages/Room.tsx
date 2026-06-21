@@ -88,7 +88,7 @@ export default function Room() {
 
   async function handleVote(optionId: string) {
     if (!me || !activeTopic) return;
-    await api.vote(activeTopic.id, me.memberId, optionId);
+    await api.vote(activeTopic.id, me.memberId, optionId, me.token);
     await refresh();
   }
 

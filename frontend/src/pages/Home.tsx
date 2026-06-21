@@ -2,18 +2,27 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api.js";
 
-export function saveMember(code: string, memberId: string, memberName: string) {
+export interface StoredMember {
+  memberId: string;
+  memberName: string;
+  token: string;
+}
+
+export function saveMember(
+  code: string,
+  memberId: string,
+  memberName: string,
+  token: string
+) {
   localStorage.setItem(
     `favoritq:${code.toUpperCase()}`,
-    JSON.stringify({ memberId, memberName })
+    JSON.stringify({ memberId, memberName, token })
   );
 }
 
-export function loadMember(
-  code: string
-): { memberId: string; memberName: string } | null {
+export function loadMember(code: string): StoredMember | null {
   const raw = localStorage.getItem(`favoritq:${code.toUpperCase()}`);
-  return raw ? JSON.parse(raw) : null;
+  return raw ? (JSON.parse(raw) as StoredMember) : null;
 }
 
 export default function Home() {
@@ -30,7 +39,7 @@ export default function Home() {
     try {
       const { room } = await api.createRoom();
       const joined = await api.joinRoom(room.code, name.trim());
-      saveMember(room.code, joined.member.id, joined.member.name);
+      saveMember(room.code, joined.member.id, joined.member.name, joined.token);
       navigate(`/room/${room.code}`);
     } catch (e) {
       setError((e as Error).message);
@@ -46,7 +55,12 @@ export default function Home() {
     setError(null);
     try {
       const joined = await api.joinRoom(code.trim(), name.trim());
-      saveMember(joined.room.code, joined.member.id, joined.member.name);
+      saveMember(
+        joined.room.code,
+        joined.member.id,
+        joined.member.name,
+        joined.token
+      );
       navigate(`/room/${joined.room.code}`);
     } catch (e) {
       setError((e as Error).message);

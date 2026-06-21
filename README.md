@@ -62,16 +62,18 @@ VS Code で「Reopen in Container」を選ぶと、`docker-compose.yml` の `bac
 | Method | Path | 説明 |
 | ------ | ---- | ---- |
 | POST | `/api/rooms` | ルーム作成 |
-| POST | `/api/rooms/:code/join` | 名前で参加 |
+| POST | `/api/rooms/:code/join` | 名前で参加（メンバートークンを発行して返す） |
 | GET  | `/api/rooms/:code` | ルーム状態（メンバー・進行中お題） |
 | POST | `/api/rooms/:code/topics` | お題設定＋選択肢生成 |
-| POST | `/api/topics/:id/choices` | 選択を記録 |
+| POST | `/api/topics/:id/choices` | 選択を記録（`x-member-token` ヘッダで本人確認） |
 | GET  | `/api/topics/:id/result` | お題単体のマッチング率 |
 | POST | `/api/topics/:id/close` | お題を閉じる（次のお題へ） |
 | GET  | `/api/rooms/:code/result` | ルーム累計のマッチング率 |
 
 ## メモ
 
-- 本リポジトリは「動く雛形（スケルトン）」です。認証・本番デプロイ設定などは未実装で、
-  後続で拡張する前提です。
+- 本リポジトリは「動く雛形（スケルトン）」をベースに拡張中です。本番デプロイ設定は
+  `DEPLOY.md` を参照してください。
+- 投票の本人確認: 参加時にサーバが秘密のメンバートークンを発行し、クライアントは
+  localStorage に保存。投票時に `x-member-token` ヘッダで送り、なりすましを防ぎます。
 - 機密情報（APIキー）は `.env`（gitignore 済み）にのみ置いてください。
