@@ -1,9 +1,25 @@
 import { Router } from "express";
 import type { RequestHandler } from "express";
 import type { Server } from "socket.io";
+import { randomBytes } from "node:crypto";
 import { query } from "../db.js";
 import { generateOptions } from "../services/ai.js";
 import { matchingForRoom, matchingForTopic } from "../services/matching.js";
+
+/** 参加メンバーに発行する秘密トークン（本人確認用）を生成する。 */
+function generateMemberToken(): string {
+  return randomBytes(24).toString("base64url");
+}
+
+/** リクエストからメンバートークンを取得する（ヘッダ優先、なければ body）。 */
+function getMemberToken(req: Parameters<RequestHandler>[0]): string | undefined {
+  const header = req.header("x-member-token");
+  if (header && header.trim()) return header.trim();
+  const fromBody: unknown = req.body?.token;
+  return typeof fromBody === "string" && fromBody.trim()
+    ? fromBody.trim()
+    : undefined;
+}
 
 /**
  * Express 4 は async ハンドラの reject を error middleware に渡さないため、
@@ -45,8 +61,10 @@ async function findRoomByCode(code: string): Promise<RoomRow | null> {
 
 /** ルームの現在状態（メンバー・進行中のお題と選択肢・投票状況）を返す。 */
 async function getRoomState(room: RoomRow) {
+  // token を持つメンバーのみ対象（マイグレーション前の token=NULL の幽霊行は除外）。
   const { rows: members } = await query(
-    `SELECT id, name, joined_at FROM members WHERE room_id = $1 ORDER BY joined_at`,
+    `SELECT id, name, joined_at FROM members
+       WHERE room_id = $1 AND token IS NOT NULL ORDER BY joined_at`,
     [room.id]
   );
 
@@ -103,15 +121,17 @@ export function createRoomsRouter(io: Server): Router {
     const room = await findRoomByCode(req.params.code);
     if (!room) return res.status(404).json({ error: "room not found" });
 
+    const token = generateMemberToken();
     const { rows } = await query(
-      `INSERT INTO members (room_id, name) VALUES ($1, $2) RETURNING id, name, joined_at`,
-      [room.id, name.trim()]
+      `INSERT INTO members (room_id, name, token) VALUES ($1, $2, $3) RETURNING id, name, joined_at`,
+      [room.id, name.trim(), token]
     );
     const member = rows[0];
 
+    // 他メンバーへの通知には token を含めない（本人にのみ返す）。
     io.to(room.code).emit("member-joined", { member });
     const state = await getRoomState(room);
-    res.status(201).json({ member, ...state });
+    res.status(201).json({ member, token, ...state });
   }));
 
   // ルーム状態取得
@@ -177,13 +197,18 @@ export function createRoomsRouter(io: Server): Router {
       return res.status(409).json({ error: "topic is not active" });
     }
 
-    // 所有権の検証: member が同じルーム、option が同じお題に属することを確認
-    const { rows: memberRows } = await query(
-      `SELECT 1 FROM members WHERE id = $1 AND room_id = $2`,
+    // 所有権の検証: member が同じルームに属することを確認
+    const { rows: memberRows } = await query<{ token: string | null }>(
+      `SELECT token FROM members WHERE id = $1 AND room_id = $2`,
       [memberId, topic.room_id]
     );
     if (!memberRows[0]) {
       return res.status(400).json({ error: "member does not belong to this room" });
+    }
+    // 本人確認: 参加時に発行したトークンと一致するか（なりすまし防止）。
+    const token = getMemberToken(req);
+    if (!token || token !== memberRows[0].token) {
+      return res.status(401).json({ error: "invalid or missing member token" });
     }
     const { rows: optionRows } = await query(
       `SELECT 1 FROM options WHERE id = $1 AND topic_id = $2`,
@@ -201,11 +226,13 @@ export function createRoomsRouter(io: Server): Router {
       [topic.id, memberId, optionId]
     );
 
-    // 投票状況を集計
+    // 投票状況を集計（total は token を持つ有効メンバーのみ。token=NULL の
+    // 幽霊行を含めると voted>=total に到達せずお題を完了できなくなるため除外）。
     const { rows: counts } = await query<{ voted: string; total: string }>(
       `SELECT
          (SELECT COUNT(*) FROM choices WHERE topic_id = $1) AS voted,
-         (SELECT COUNT(*) FROM members WHERE room_id = $2) AS total`,
+         (SELECT COUNT(*) FROM members
+            WHERE room_id = $2 AND token IS NOT NULL) AS total`,
       [topic.id, topic.room_id]
     );
     const voted = Number(counts[0].voted);

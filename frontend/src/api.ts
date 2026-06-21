@@ -1,9 +1,16 @@
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:5000";
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(
+  path: string,
+  init?: RequestInit & { token?: string }
+): Promise<T> {
+  const { token, ...rest } = init ?? {};
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  // 本人確認用メンバートークン（参加時に発行）。member 操作で送る。
+  if (token) headers["x-member-token"] = token;
   const res = await fetch(`${API_BASE}/api${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...init,
+    headers,
+    ...rest,
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -67,10 +74,13 @@ export const api = {
     }),
 
   joinRoom: (code: string, name: string) =>
-    request<RoomState & { member: Member }>(`/rooms/${code}/join`, {
-      method: "POST",
-      body: JSON.stringify({ name }),
-    }),
+    request<RoomState & { member: Member; token: string }>(
+      `/rooms/${code}/join`,
+      {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      }
+    ),
 
   getRoom: (code: string) => request<RoomState>(`/rooms/${code}`),
 
@@ -80,10 +90,14 @@ export const api = {
       body: JSON.stringify({ title, count }),
     }),
 
-  vote: (topicId: string, memberId: string, optionId: string) =>
+  vote: (topicId: string, memberId: string, optionId: string, token: string) =>
     request<{ ok: boolean; voted: number; total: number }>(
       `/topics/${topicId}/choices`,
-      { method: "POST", body: JSON.stringify({ memberId, optionId }) }
+      {
+        method: "POST",
+        body: JSON.stringify({ memberId, optionId }),
+        token,
+      }
     ),
 
   topicResult: (topicId: string) =>
