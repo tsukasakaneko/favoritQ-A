@@ -2,7 +2,7 @@ import { Router } from "express";
 import type { RequestHandler } from "express";
 import type { Server } from "socket.io";
 import { randomBytes } from "node:crypto";
-import { query } from "../db.js";
+import { query, withTransaction } from "../db.js";
 import { generateOptions } from "../services/ai.js";
 import { matchingForRoom, matchingForTopic } from "../services/matching.js";
 
@@ -141,6 +141,59 @@ export function createRoomsRouter(io: Server): Router {
     res.json(await getRoomState(room));
   }));
 
+  // ルームから退出（メンバー削除）。本人トークンが必要。
+  // choices は ON DELETE CASCADE で一緒に消えるため集計から除外される。
+  router.post("/rooms/:code/leave", asyncHandler(async (req, res) => {
+    const memberId: string | undefined = req.body?.memberId;
+    if (!memberId) {
+      return res.status(400).json({ error: "memberId is required" });
+    }
+    const room = await findRoomByCode(req.params.code);
+    if (!room) return res.status(404).json({ error: "room not found" });
+
+    const { rows: memberRows } = await query<{ token: string | null }>(
+      `SELECT token FROM members WHERE id = $1 AND room_id = $2`,
+      [memberId, room.id]
+    );
+    if (!memberRows[0]) {
+      // 既に居ない場合も冪等に成功扱い。
+      return res.json({ ok: true });
+    }
+    const token = getMemberToken(req);
+    if (!token || token !== memberRows[0].token) {
+      return res.status(401).json({ error: "invalid or missing member token" });
+    }
+
+    await query(`DELETE FROM members WHERE id = $1`, [memberId]);
+
+    io.to(room.code).emit("member-left", { memberId });
+
+    // 退出により残りメンバー全員が投票済みになる場合は結果を出せるよう通知。
+    const { rows: topicRows } = await query<{ id: string }>(
+      `SELECT id FROM topics WHERE room_id = $1 AND status = 'active'
+         ORDER BY created_at DESC LIMIT 1`,
+      [room.id]
+    );
+    if (topicRows[0]) {
+      const topicId = topicRows[0].id;
+      const { rows: counts } = await query<{ voted: string; total: string }>(
+        `SELECT
+           (SELECT COUNT(*) FROM choices WHERE topic_id = $1) AS voted,
+           (SELECT COUNT(*) FROM members
+              WHERE room_id = $2 AND token IS NOT NULL) AS total`,
+        [topicId, room.id]
+      );
+      const voted = Number(counts[0].voted);
+      const total = Number(counts[0].total);
+      io.to(room.code).emit("choice-made", { topicId, voted, total });
+      if (total > 0 && voted >= total) {
+        io.to(room.code).emit("result-ready", { topicId });
+      }
+    }
+
+    res.json({ ok: true });
+  }));
+
   // お題を設定（既存の active を閉じ、AIで選択肢を生成）
   router.post("/rooms/:code/topics", asyncHandler(async (req, res) => {
     const title: string | undefined = req.body?.title;
@@ -151,28 +204,32 @@ export function createRoomsRouter(io: Server): Router {
     const room = await findRoomByCode(req.params.code);
     if (!room) return res.status(404).json({ error: "room not found" });
 
-    // 進行中のお題があれば閉じる
-    await query(
-      `UPDATE topics SET status = 'closed' WHERE room_id = $1 AND status = 'active'`,
-      [room.id]
-    );
-
-    const { rows: topicRows } = await query(
-      `INSERT INTO topics (room_id, title) VALUES ($1, $2) RETURNING id, title, status, created_at`,
-      [room.id, title.trim()]
-    );
-    const topic = topicRows[0];
-
-    // AI（or モック）で選択肢生成
+    // AI（or モック）の選択肢生成はネットワーク I/O なのでトランザクション外で実行。
     const labels = await generateOptions(title.trim(), count);
-    const optionRows = [];
-    for (let i = 0; i < labels.length; i++) {
-      const { rows } = await query(
-        `INSERT INTO options (topic_id, label, sort_order) VALUES ($1, $2, $3) RETURNING id, label, sort_order`,
-        [topic.id, labels[i], i]
+
+    // 旧お題のクローズ・新お題の作成・選択肢の挿入を1トランザクションで原子的に行う
+    // （途中失敗で「active が無い／選択肢の無いお題が残る」不整合を防ぐ）。
+    const { topic, optionRows } = await withTransaction(async (client) => {
+      await client.query(
+        `UPDATE topics SET status = 'closed' WHERE room_id = $1 AND status = 'active'`,
+        [room.id]
       );
-      optionRows.push(rows[0]);
-    }
+      const { rows: topicRows } = await client.query(
+        `INSERT INTO topics (room_id, title) VALUES ($1, $2) RETURNING id, title, status, created_at`,
+        [room.id, title.trim()]
+      );
+      const createdTopic = topicRows[0];
+
+      const inserted = [];
+      for (let i = 0; i < labels.length; i++) {
+        const { rows } = await client.query(
+          `INSERT INTO options (topic_id, label, sort_order) VALUES ($1, $2, $3) RETURNING id, label, sort_order`,
+          [createdTopic.id, labels[i], i]
+        );
+        inserted.push(rows[0]);
+      }
+      return { topic: createdTopic, optionRows: inserted };
+    });
 
     const payload = { topic, options: optionRows };
     io.to(room.code).emit("topic-started", payload);

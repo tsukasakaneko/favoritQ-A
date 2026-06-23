@@ -103,6 +103,17 @@ button.primary {
   font-weight: 600;
 }
 
+button.link {
+  background: none;
+  border: none;
+  color: var(--muted);
+  padding: 4px 0;
+  font-size: 0.8rem;
+  text-decoration: underline;
+  width: auto;
+  cursor: pointer;
+}
+
 .divider {
   text-align: center;
   color: var(--muted);

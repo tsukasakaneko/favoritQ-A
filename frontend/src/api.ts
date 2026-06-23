@@ -84,6 +84,13 @@ export const api = {
 
   getRoom: (code: string) => request<RoomState>(`/rooms/${code}`),
 
+  leaveRoom: (code: string, memberId: string, token: string) =>
+    request<{ ok: boolean }>(`/rooms/${code}/leave`, {
+      method: "POST",
+      body: JSON.stringify({ memberId }),
+      token,
+    }),
+
   createTopic: (code: string, title: string, count = 6) =>
     request<{ topic: Topic; options: Option[] }>(`/rooms/${code}/topics`, {
       method: "POST",
