@@ -62,6 +62,7 @@ export default function Home() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="例: たろう"
+            maxLength={30}
           />
         </label>
 
