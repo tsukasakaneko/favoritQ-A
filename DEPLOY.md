@@ -87,6 +87,22 @@ Cloudflare Workers 単体でのデプロイは **このアプリには非対応*
 
 ---
 
+## セキュリティに関する注意
+
+### PostgreSQL SSL と `rejectUnauthorized: false`
+
+`backend/src/db.ts` では `ssl: { rejectUnauthorized: false }` を使用しています。
+これは Render のマネージド PostgreSQL が自己署名証明書を使用しているためです。
+
+**影響とトレードオフ**:
+- 通信は暗号化されますが、サーバー証明書の検証をスキップするため中間者攻撃（MITM）に理論上脆弱です。
+- Render の内部ネットワーク上（Private Network）での接続では実際のリスクは低い。
+- パブリックインターネット経由で接続する場合（`DATABASE_URL` が External URL のとき）は、CA 証明書を取得して `ca` オプションに渡すことを推奨します。
+
+本番で CA 検証を有効にするには、Render から CA 証明書をダウンロードし環境変数経由で渡す方法があります（[Render Postgres SSL ドキュメント](https://render.com/docs/databases#connecting-to-your-database-manually)を参照）。
+
+---
+
 ## ローカル開発
 
 本番用 Dockerfile はローカル開発フローに影響しません。

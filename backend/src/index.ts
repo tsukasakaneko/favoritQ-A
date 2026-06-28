@@ -4,8 +4,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import cors from "cors";
+import { rateLimit } from "express-rate-limit";
 import { Server } from "socket.io";
-import { waitForDb, runSchema, cleanupStaleRooms } from "./db.js";
+import { pool, waitForDb, runSchema, cleanupStaleRooms } from "./db.js";
 import { createRoomsRouter } from "./routes/rooms.js";
 import { registerSocketHandlers } from "./socket.js";
 
@@ -16,7 +17,26 @@ const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:5173";
 // 古いルームの保持時間（時間）。0 以下でクリーンアップ無効。
 const ROOM_TTL_HOURS = Number(process.env.ROOM_TTL_HOURS ?? "24");
 
+/** 起動前に必須の環境変数を検証する。欠落があればエラーを出すが起動は続ける。 */
+function checkEnv() {
+  if (!process.env.DATABASE_URL) {
+    console.warn(
+      "[config] DATABASE_URL is not set — using default local connection string"
+    );
+  }
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.warn(
+      "[config] ANTHROPIC_API_KEY is not set — AI option generation will use mock data"
+    );
+  }
+  if (Number.isNaN(PORT) || PORT <= 0) {
+    console.warn(`[config] Invalid PORT value, falling back to 5000`);
+  }
+}
+
 async function main() {
+  checkEnv();
+
   await waitForDb();
   await runSchema();
 
@@ -42,9 +62,26 @@ async function main() {
 
   registerSocketHandlers(io);
 
-  app.get("/api/health", (_req, res) => {
-    res.json({ status: "ok", time: new Date().toISOString() });
+  // ヘルスチェック（DB 疎通確認を含む）
+  app.get("/api/health", async (_req, res) => {
+    try {
+      await pool.query("SELECT 1");
+      res.json({ status: "ok", db: "ok", time: new Date().toISOString() });
+    } catch {
+      res.status(503).json({ status: "error", db: "unreachable", time: new Date().toISOString() });
+    }
   });
+
+  // AI 選択肢生成エンドポイントにレート制限を適用（DoS / API コスト保護）。
+  // ウィンドウ 1 分あたり最大 10 回。IP ごと。
+  const topicsRateLimit = rateLimit({
+    windowMs: 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "too many requests, please slow down" },
+  });
+  app.post("/api/rooms/:code/topics", topicsRateLimit);
 
   app.use("/api", createRoomsRouter(io));
 
@@ -61,7 +98,7 @@ async function main() {
     console.log(`[backend] serving static frontend from ${staticDir}`);
   }
 
-  // エラーハンドラ
+  // エラーハンドラ（asyncHandler 経由の未処理例外のみ到達する）
   app.use(
     (
       err: unknown,
@@ -69,8 +106,15 @@ async function main() {
       res: express.Response,
       _next: express.NextFunction
     ) => {
-      console.error("[error]", err);
-      res.status(500).json({ error: "internal server error" });
+      // スタックトレース付きで記録し、詳細はクライアントに返さない（情報漏えい防止）
+      if (err instanceof Error) {
+        console.error("[error]", err.message, err.stack);
+      } else {
+        console.error("[error]", err);
+      }
+      if (!res.headersSent) {
+        res.status(500).json({ error: "internal server error" });
+      }
     }
   );
 
