@@ -5,6 +5,12 @@ import { randomBytes } from "node:crypto";
 import { query, withTransaction } from "../db.js";
 import { generateOptions } from "../services/ai.js";
 import { matchingForRoom, matchingForTopic } from "../services/matching.js";
+import {
+  LIMITS,
+  validateRequiredText,
+  validateOptionalText,
+  clampCount,
+} from "../validation.js";
 
 /** 参加メンバーに発行する秘密トークン（本人確認用）を生成する。 */
 function generateMemberToken(): string {
@@ -97,7 +103,15 @@ export function createRoomsRouter(io: Server): Router {
 
   // ルーム作成
   router.post("/rooms", asyncHandler(async (req, res) => {
-    const name: string | undefined = req.body?.name;
+    const nameResult = validateOptionalText(
+      req.body?.name,
+      "name",
+      LIMITS.ROOM_NAME_MAX
+    );
+    if ("error" in nameResult) {
+      return res.status(400).json({ error: nameResult.error });
+    }
+    const name = nameResult.value;
     // ユニークな code を確保（衝突時はリトライ）
     let code = generateRoomCode();
     for (let i = 0; i < 5; i++) {
@@ -107,24 +121,29 @@ export function createRoomsRouter(io: Server): Router {
     }
     const { rows } = await query<RoomRow>(
       `INSERT INTO rooms (code, name) VALUES ($1, $2) RETURNING *`,
-      [code, name ?? null]
+      [code, name]
     );
     res.status(201).json({ room: rows[0] });
   }));
 
   // ルーム参加
   router.post("/rooms/:code/join", asyncHandler(async (req, res) => {
-    const name: string | undefined = req.body?.name;
-    if (!name || !name.trim()) {
-      return res.status(400).json({ error: "name is required" });
+    const nameResult = validateRequiredText(
+      req.body?.name,
+      "name",
+      LIMITS.NAME_MAX
+    );
+    if ("error" in nameResult) {
+      return res.status(400).json({ error: nameResult.error });
     }
+    const name = nameResult.value;
     const room = await findRoomByCode(req.params.code);
     if (!room) return res.status(404).json({ error: "room not found" });
 
     const token = generateMemberToken();
     const { rows } = await query(
       `INSERT INTO members (room_id, name, token) VALUES ($1, $2, $3) RETURNING id, name, joined_at`,
-      [room.id, name.trim(), token]
+      [room.id, name, token]
     );
     const member = rows[0];
 
@@ -196,16 +215,28 @@ export function createRoomsRouter(io: Server): Router {
 
   // お題を設定（既存の active を閉じ、AIで選択肢を生成）
   router.post("/rooms/:code/topics", asyncHandler(async (req, res) => {
-    const title: string | undefined = req.body?.title;
-    const count: number = Number(req.body?.count) || 6;
-    if (!title || !title.trim()) {
-      return res.status(400).json({ error: "title is required" });
+    const titleResult = validateRequiredText(
+      req.body?.title,
+      "title",
+      LIMITS.TITLE_MAX
+    );
+    if ("error" in titleResult) {
+      return res.status(400).json({ error: titleResult.error });
     }
+    const title = titleResult.value;
+    // 不正値（NaN・負数・巨大値）は許容範囲にクランプ。
+    const count = clampCount(req.body?.count);
     const room = await findRoomByCode(req.params.code);
     if (!room) return res.status(404).json({ error: "room not found" });
 
     // AI（or モック）の選択肢生成はネットワーク I/O なのでトランザクション外で実行。
-    const labels = await generateOptions(title.trim(), count);
+    const labels = await generateOptions(title, count);
+    // 選択肢が生成できなければお題を作らずエラー（空のお題を残さない）。
+    if (labels.length === 0) {
+      return res
+        .status(502)
+        .json({ error: "failed to generate options for this topic" });
+    }
 
     // 旧お題のクローズ・新お題の作成・選択肢の挿入を1トランザクションで原子的に行う
     // （途中失敗で「active が無い／選択肢の無いお題が残る」不整合を防ぐ）。
@@ -216,7 +247,7 @@ export function createRoomsRouter(io: Server): Router {
       );
       const { rows: topicRows } = await client.query(
         `INSERT INTO topics (room_id, title) VALUES ($1, $2) RETURNING id, title, status, created_at`,
-        [room.id, title.trim()]
+        [room.id, title]
       );
       const createdTopic = topicRows[0];
 

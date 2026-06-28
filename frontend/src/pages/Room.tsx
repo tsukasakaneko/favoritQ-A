@@ -149,6 +149,7 @@ export default function Room() {
               value={topicTitle}
               onChange={(e) => setTopicTitle(e.target.value)}
               placeholder="例: 旅行で行くなら？"
+              maxLength={100}
             />
           </label>
           <button className="primary" disabled={busy} onClick={handleCreateTopic}>
