@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { api, type RoomState, type MatchingResult } from "../api.js";
-import { getSocket } from "../socket.js";
+import { getSocket, subscribeConnectionStatus, type ConnectionStatus } from "../socket.js";
 import { loadMember, clearMember } from "../member.js";
 import Vote from "./Vote.js";
 import Result from "./Result.js";
@@ -17,6 +17,7 @@ export default function Room() {
   const [error, setError] = useState<string | null>(null);
   const [topicResult, setTopicResult] = useState<MatchingResult | null>(null);
   const [roomResult, setRoomResult] = useState<MatchingResult | null>(null);
+  const [connStatus, setConnStatus] = useState<ConnectionStatus>("connecting");
 
   const refresh = useCallback(async () => {
     try {
@@ -39,16 +40,26 @@ export default function Room() {
     socket.emit("join-room", { code, memberId: myMemberId });
 
     const onChange = () => refresh();
+    const onTopicClosed = () => {
+      setTopicResult(null);
+      setRoomResult(null);
+      refresh();
+    };
+    const onReconnect = () => {
+      // Re-announce presence and sync state after reconnect
+      socket.emit("join-room", { code, memberId: myMemberId });
+      refresh();
+    };
+
     socket.on("member-joined", onChange);
     socket.on("member-left", onChange);
     socket.on("topic-started", onChange);
     socket.on("choice-made", onChange);
     socket.on("result-ready", onChange);
-    socket.on("topic-closed", () => {
-      setTopicResult(null);
-      setRoomResult(null);
-      refresh();
-    });
+    socket.on("topic-closed", onTopicClosed);
+    socket.on("reconnect", onReconnect);
+
+    const unsubStatus = subscribeConnectionStatus(setConnStatus);
 
     return () => {
       socket.emit("leave-room", { code });
@@ -57,7 +68,9 @@ export default function Room() {
       socket.off("topic-started", onChange);
       socket.off("choice-made", onChange);
       socket.off("result-ready", onChange);
-      socket.off("topic-closed");
+      socket.off("topic-closed", onTopicClosed);
+      socket.off("reconnect", onReconnect);
+      unsubStatus();
     };
   }, [code, refresh, myMemberId]);
 
@@ -133,6 +146,14 @@ export default function Room() {
           </ul>
         </div>
       </header>
+
+      {connStatus !== "connected" && (
+        <p className={`conn-status conn-status--${connStatus}`}>
+          {connStatus === "reconnecting" && "再接続中…"}
+          {connStatus === "connecting" && "接続中…"}
+          {connStatus === "disconnected" && "接続が切れました。再接続をお待ちください。"}
+        </p>
+      )}
 
       {error && <p className="error">{error}</p>}
 
