@@ -37,4 +37,10 @@ describe("member storage", () => {
     clearMember("abc123");
     expect(loadMember("abc123")).toBeNull();
   });
+
+  it("localStorage が破損していたら null を返して削除する", () => {
+    store.set("favoritq:BROKEN", "not-valid-json{{{{");
+    expect(loadMember("BROKEN")).toBeNull();
+    expect(store.has("favoritq:BROKEN")).toBe(false);
+  });
 });
