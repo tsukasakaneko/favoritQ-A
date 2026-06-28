@@ -230,7 +230,8 @@ export function createRoomsRouter(io: Server): Router {
     if (!room) return res.status(404).json({ error: "room not found" });
 
     // AI（or モック）の選択肢生成はネットワーク I/O なのでトランザクション外で実行。
-    const labels = await generateOptions(title, count);
+    const generated = await generateOptions(title, count);
+    const labels = generated.options;
     // 選択肢が生成できなければお題を作らずエラー（空のお題を残さない）。
     if (labels.length === 0) {
       return res
@@ -262,7 +263,7 @@ export function createRoomsRouter(io: Server): Router {
       return { topic: createdTopic, optionRows: inserted };
     });
 
-    const payload = { topic, options: optionRows };
+    const payload = { topic, options: optionRows, usingMock: generated.usingMock };
     io.to(room.code).emit("topic-started", payload);
     res.status(201).json(payload);
   }));

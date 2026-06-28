@@ -10,12 +10,16 @@ interface Props {
 export default function Vote({ title, options, onVote }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function submit() {
     if (!selected) return;
     setBusy(true);
+    setError(null);
     try {
       await onVote(selected);
+    } catch (e) {
+      setError((e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -39,6 +43,7 @@ export default function Vote({ title, options, onVote }: Props) {
       <button className="primary" disabled={!selected || busy} onClick={submit}>
         この選択肢に決定
       </button>
+      {error && <p className="error">{error}</p>}
     </div>
   );
 }
