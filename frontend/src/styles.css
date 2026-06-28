@@ -205,3 +205,13 @@ button.link {
   color: var(--accent-2);
   font-weight: 600;
 }
+
+.notice {
+  margin: 0 0 12px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  background: rgba(108, 140, 255, 0.1);
+  color: var(--accent);
+  border: 1px solid rgba(108, 140, 255, 0.3);
+}

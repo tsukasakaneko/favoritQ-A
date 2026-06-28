@@ -17,6 +17,7 @@ export default function Room() {
   const [error, setError] = useState<string | null>(null);
   const [topicResult, setTopicResult] = useState<MatchingResult | null>(null);
   const [roomResult, setRoomResult] = useState<MatchingResult | null>(null);
+  const [usingMock, setUsingMock] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -47,6 +48,7 @@ export default function Room() {
     socket.on("topic-closed", () => {
       setTopicResult(null);
       setRoomResult(null);
+      setUsingMock(false);
       refresh();
     });
 
@@ -80,7 +82,8 @@ export default function Room() {
     setBusy(true);
     setError(null);
     try {
-      await api.createTopic(code, topicTitle.trim());
+      const result = await api.createTopic(code, topicTitle.trim());
+      setUsingMock(result.usingMock);
       setTopicTitle("");
     } catch (e) {
       setError((e as Error).message);
@@ -156,6 +159,10 @@ export default function Room() {
             {busy ? "選択肢を生成中…" : "お題を決定して選択肢を生成"}
           </button>
         </div>
+      )}
+
+      {usingMock && activeTopic && (
+        <p className="notice">AI が利用できなかったため、仮の選択肢を表示しています。</p>
       )}
 
       {activeTopic && !myChoice && (

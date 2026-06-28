@@ -61,7 +61,7 @@ async function main() {
     console.log(`[backend] serving static frontend from ${staticDir}`);
   }
 
-  // エラーハンドラ
+  // エラーハンドラ（asyncHandler 経由の未処理例外のみ到達する）
   app.use(
     (
       err: unknown,
@@ -69,8 +69,15 @@ async function main() {
       res: express.Response,
       _next: express.NextFunction
     ) => {
-      console.error("[error]", err);
-      res.status(500).json({ error: "internal server error" });
+      // スタックトレース付きで記録し、詳細はクライアントに返さない（情報漏えい防止）
+      if (err instanceof Error) {
+        console.error("[error]", err.message, err.stack);
+      } else {
+        console.error("[error]", err);
+      }
+      if (!res.headersSent) {
+        res.status(500).json({ error: "internal server error" });
+      }
     }
   );
 

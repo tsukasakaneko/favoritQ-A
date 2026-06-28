@@ -92,10 +92,13 @@ export const api = {
     }),
 
   createTopic: (code: string, title: string, count = 6) =>
-    request<{ topic: Topic; options: Option[] }>(`/rooms/${code}/topics`, {
-      method: "POST",
-      body: JSON.stringify({ title, count }),
-    }),
+    request<{ topic: Topic; options: Option[]; usingMock: boolean }>(
+      `/rooms/${code}/topics`,
+      {
+        method: "POST",
+        body: JSON.stringify({ title, count }),
+      }
+    ),
 
   vote: (topicId: string, memberId: string, optionId: string, token: string) =>
     request<{ ok: boolean; voted: number; total: number }>(

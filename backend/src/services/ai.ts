@@ -9,18 +9,24 @@ const SYSTEM_PROMPT = `あなたは「お題マッチングゲーム」の選択
 - 出力は必ず次の JSON 形式のみ。前後に説明や記号を付けない:
   {"options": ["選択肢1", "選択肢2", ...]}`;
 
+export interface GenerateResult {
+  options: string[];
+  usingMock: boolean;
+}
+
 /**
  * お題に沿った選択肢を生成する。
  * ANTHROPIC_API_KEY が無い、または生成に失敗した場合はモック選択肢を返す。
+ * usingMock=true の場合は AI を使わずにモック選択肢を返したことを示す。
  */
 export async function generateOptions(
   topic: string,
   count = 6
-): Promise<string[]> {
+): Promise<GenerateResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey || apiKey.trim() === "") {
     console.log("[ai] ANTHROPIC_API_KEY 未設定 — モック選択肢を返します");
-    return mockOptions(topic, count);
+    return { options: mockOptions(topic, count), usingMock: true };
   }
 
   try {
@@ -50,10 +56,10 @@ export async function generateOptions(
     const options = parseOptions(text);
 
     if (options.length === 0) throw new Error("empty options");
-    return options.slice(0, count);
+    return { options: options.slice(0, count), usingMock: false };
   } catch (err) {
     console.error("[ai] 生成に失敗しました。モックにフォールバックします:", err);
-    return mockOptions(topic, count);
+    return { options: mockOptions(topic, count), usingMock: true };
   }
 }
 
