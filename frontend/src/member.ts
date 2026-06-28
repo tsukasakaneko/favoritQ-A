@@ -23,7 +23,14 @@ export function saveMember(
 
 export function loadMember(code: string): StoredMember | null {
   const raw = localStorage.getItem(key(code));
-  return raw ? (JSON.parse(raw) as StoredMember) : null;
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as StoredMember;
+  } catch {
+    // localStorage の値が破損していた場合は削除して null を返す
+    localStorage.removeItem(key(code));
+    return null;
+  }
 }
 
 export function clearMember(code: string) {

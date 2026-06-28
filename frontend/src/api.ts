@@ -1,4 +1,5 @@
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:5000";
+const REQUEST_TIMEOUT_MS = 15_000;
 
 async function request<T>(
   path: string,
@@ -8,15 +9,28 @@ async function request<T>(
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   // 本人確認用メンバートークン（参加時に発行）。member 操作で送る。
   if (token) headers["x-member-token"] = token;
-  const res = await fetch(`${API_BASE}/api${path}`, {
-    headers,
-    ...rest,
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error ?? `request failed: ${res.status}`);
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${API_BASE}/api${path}`, {
+      headers,
+      signal: controller.signal,
+      ...rest,
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error ?? `request failed: ${res.status}`);
+    }
+    return res.json() as Promise<T>;
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error("リクエストがタイムアウトしました");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
   }
-  return res.json() as Promise<T>;
 }
 
 export interface Member {
