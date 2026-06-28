@@ -205,3 +205,24 @@ button.link {
   color: var(--accent-2);
   font-weight: 600;
 }
+
+.conn-status {
+  margin: 0 0 12px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.conn-status--connecting,
+.conn-status--reconnecting {
+  background: rgba(251, 202, 4, 0.12);
+  color: #fbca04;
+  border: 1px solid rgba(251, 202, 4, 0.3);
+}
+
+.conn-status--disconnected {
+  background: rgba(255, 107, 107, 0.12);
+  color: var(--no);
+  border: 1px solid rgba(255, 107, 107, 0.3);
+}
